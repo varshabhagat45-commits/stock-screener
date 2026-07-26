@@ -1,0 +1,6 @@
+{
+  "name": "long-term-stock-screener",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Long-term stock screener + AI deep-dive analysis backend"
+}
