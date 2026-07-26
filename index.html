@@ -100,7 +100,7 @@
 <div class="mainpanel" id="panel-screener">
 
 <div class="source-note">
-AUTO-SCREENED per your filter (all AND): P/E &lt; 20, ROCE &gt; 35%, Net Profit 5yr CAGR &gt; 10%, ROE &gt; 15%, Revenue growth &gt; 10% (quarterly YoY used as the closest available proxy), Debt/Equity &lt; 0.5. 3 names cleared it. <b>Price above 200-day SMA isn't in any fundamentals data source I can pull — that's a chart read, not a database field</b>, so it's not applied here; check it yourself on TradingView before treating any of these as cleared. Crizac clears every checked leg cleanly; Gokul Agro and Oriana Power sit right at the 0.5 D/E line (sources disagree slightly on the exact figure) — worth a quick manual confirm. Click a name to run the full deep-dive on it in the Analyze tab.
+AUTO-SCREENED per your latest filter (all AND): Market Cap &gt; ₹500 Cr, Sales/Profit 5yr growth &gt; 10%/12%, positive YoY quarterly sales &amp; profit growth, ROCE &gt; 18%, ROE &gt; 15%, D/E &lt; 0.5, P/E &lt; 25. 11 names cleared it, from the top page of a 58-name match (Screener.in blocked deeper pages this run — re-run for the rest). <b>EBITDA margin, interest coverage, promoter holding %, pledge %, and CFO/PAT aren't in this data pull</b> — those show ⚪ N/A and need an individual check before trusting a STRONG verdict. Worth noticing yourself: this list is heavily solar/renewables-concentrated, which is a sector-crowding signal worth interrogating, not just accepting. Click a name to run the full deep-dive on it in the Analyze tab.
 </div>
 
 <div class="tabs">
@@ -233,6 +233,7 @@ async function runAnalysis(){
   const peer = document.getElementById('an_peer').value.trim();
   const fwKey = document.getElementById('an_framework').value;
   if(!company){ alert('Enter a company or ticker first.'); return; }
+  const fw = FRAMEWORKS[fwKey];
   const btn = document.getElementById('runBtn');
   const out = document.getElementById('an_output');
   btn.disabled = true;
@@ -240,19 +241,53 @@ async function runAnalysis(){
   out.className = 'output loading';
   out.innerHTML = '<span class="spin"></span>Researching ' + company + ' and writing the analysis — this can take a little while for the deeper frameworks...';
 
+  const userMsg = `Analyze ${company}${peer ? ' (contrast/peer: ' + peer + ')' : ''} using the framework in your instructions. Research current data via web search before writing anything — do not rely on memory for any figure.`;
+
   try{
-    const resp = await fetch('/api/analyze', {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ company, peer, framework: fwKey })
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: fw.system,
+        messages: [{role:'user', content:userMsg}],
+        tools: [{type:'web_search_20250305', name:'web_search'}]
+      })
     });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
     const data = await resp.json();
-    if(!resp.ok) throw new Error(data.error || ('HTTP '+resp.status));
+    const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text);
+    const text = textBlocks.join('\n\n').trim();
     out.className = 'output';
-    out.textContent = data.text || 'No text returned.';
+    out.textContent = text || 'No text returned — raw response: ' + JSON.stringify(data).slice(0,500);
   } catch(err){
+    // A file opened locally (file:// or outside claude.ai) has no credentials and no CORS path to
+    // api.anthropic.com — that call can only succeed when this page runs inside a Claude.ai chat/artifact.
+    // Fall back to something actually useful: a ready-to-paste prompt.
+    const combined = 'SYSTEM INSTRUCTIONS:\n' + fw.system + '\n\nREQUEST:\n' + userMsg;
     out.className = 'output';
-    out.textContent = "Couldn't reach the analysis backend: " + err.message + "\n\nIf you're viewing this file directly (not deployed), the /api/analyze endpoint doesn't exist yet — see the README for the one-time deployment steps. If it's deployed, check that ANTHROPIC_API_KEY is set in your hosting provider's environment variables.";
+    out.innerHTML = '';
+    const note = document.createElement('div');
+    note.style.marginBottom = '12px';
+    note.style.color = 'var(--dim)';
+    note.style.fontFamily = 'var(--mono)';
+    note.style.fontSize = '11.5px';
+    note.style.lineHeight = '1.6';
+    note.textContent = "This page can't call Claude directly when opened as a local file or outside claude.ai — browsers block that request (no credentials, no CORS). Copy the prompt below and paste it into a Claude chat to get the full analysis with live web search:";
+    const ta = document.createElement('textarea');
+    ta.value = combined;
+    ta.style.width = '100%';
+    ta.style.height = '160px';
+    ta.style.fontFamily = 'var(--mono)';
+    ta.style.fontSize = '11.5px';
+    ta.readOnly = true;
+    const copyBtn = document.createElement('button');
+    copyBtn.textContent = 'Copy prompt';
+    copyBtn.className = 'primary';
+    copyBtn.style.marginTop = '10px';
+    copyBtn.onclick = () => { ta.select(); document.execCommand('copy'); copyBtn.textContent = 'Copied ✓'; setTimeout(()=>copyBtn.textContent='Copy prompt', 1500); };
+    out.appendChild(note); out.appendChild(ta); out.appendChild(copyBtn);
   } finally {
     btn.disabled = false;
   }
@@ -262,9 +297,17 @@ async function runAnalysis(){
 let mode = 'operating';
 
 let stocks = [
-  {mode:'operating', name:'Crizac', roce:52.34, roceTrend:null, revCagr:15.0, profitCagr:60.2, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:3481, auto:true},
-  {mode:'operating', name:'Gokul Agro Resources', roce:36.73, roceTrend:null, revCagr:13.5, profitCagr:53.3, marginTrend:null, de:0.51, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:6175, auto:true},
-  {mode:'operating', name:'Oriana Power', roce:39.6, roceTrend:null, revCagr:64.5, profitCagr:222.8, marginTrend:null, de:0.52, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:2900, auto:true},
+  {mode:'operating', name:'Waaree Renewable Tech.', roce:83.61, roceTrend:null, revCagr:131.31, profitCagr:60.69, marginTrend:null, de:0.16, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:10731, auto:true},
+  {mode:'operating', name:'Emmvee Photovoltaic', roce:44.83, roceTrend:null, revCagr:62.25, profitCagr:89.43, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:18538, auto:true},
+  {mode:'operating', name:'Websol Energy', roce:63.18, roceTrend:null, revCagr:132.07, profitCagr:152.31, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:4992, auto:true},
+  {mode:'operating', name:'Alpex Solar', roce:50.48, roceTrend:null, revCagr:245.40, profitCagr:135.04, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:2693, auto:true},
+  {mode:'operating', name:'Sathlokhar Systems', roce:53.42, roceTrend:null, revCagr:402.87, profitCagr:340.18, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:1037, auto:true},
+  {mode:'operating', name:'Waaree Energies', roce:38.78, roceTrend:null, revCagr:111.80, profitCagr:70.64, marginTrend:null, de:0.22, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:92913, auto:true},
+  {mode:'operating', name:'Danish Power', roce:40.21, roceTrend:null, revCagr:29.18, profitCagr:41.39, marginTrend:null, de:0.20, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:1651, auto:true},
+  {mode:'operating', name:'Bondada Engineering', roce:38.66, roceTrend:null, revCagr:27.93, profitCagr:11.39, marginTrend:null, de:0.20, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:3968, auto:true},
+  {mode:'operating', name:'Australian Premium Solar', roce:70.83, roceTrend:null, revCagr:83.88, profitCagr:114.41, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:738, auto:true},
+  {mode:'operating', name:'Arrow Greentech', roce:53.25, roceTrend:null, revCagr:1.72, profitCagr:3.50, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:876, auto:true},
+  {mode:'operating', name:'R M Drip & Sprinklers', roce:44.66, roceTrend:null, revCagr:55.60, profitCagr:37.30, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:833, auto:true},
 ];
 
 const FIELDS = {
