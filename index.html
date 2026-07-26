@@ -152,7 +152,7 @@ AUTO-SCREENED per your latest filter (all AND): Market Cap &gt; ₹500 Cr, Sales
     <div class="framework-desc" id="frameworkDesc"></div>
 
     <div class="row-actions">
-      <span style="color:var(--dim); font-size:11px; font-family:var(--mono);">Uses live web search for current data — no fabricated numbers.</span>
+      <span style="color:var(--dim); font-size:11px; font-family:var(--mono);">Runs on DeepSeek via NVIDIA — no live web search on this backend, so figures may be outdated. The model is instructed to flag anything that needs verification rather than guess.</span>
       <button class="primary" id="runBtn" onclick="runAnalysis()">Run analysis →</button>
     </div>
 
@@ -233,7 +233,6 @@ async function runAnalysis(){
   const peer = document.getElementById('an_peer').value.trim();
   const fwKey = document.getElementById('an_framework').value;
   if(!company){ alert('Enter a company or ticker first.'); return; }
-  const fw = FRAMEWORKS[fwKey];
   const btn = document.getElementById('runBtn');
   const out = document.getElementById('an_output');
   btn.disabled = true;
@@ -241,53 +240,19 @@ async function runAnalysis(){
   out.className = 'output loading';
   out.innerHTML = '<span class="spin"></span>Researching ' + company + ' and writing the analysis — this can take a little while for the deeper frameworks...';
 
-  const userMsg = `Analyze ${company}${peer ? ' (contrast/peer: ' + peer + ')' : ''} using the framework in your instructions. Research current data via web search before writing anything — do not rely on memory for any figure.`;
-
   try{
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('/api/analyze', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1000,
-        system: fw.system,
-        messages: [{role:'user', content:userMsg}],
-        tools: [{type:'web_search_20250305', name:'web_search'}]
-      })
+      body: JSON.stringify({ company, peer, framework: fwKey })
     });
-    if(!resp.ok) throw new Error('HTTP '+resp.status);
     const data = await resp.json();
-    const textBlocks = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text);
-    const text = textBlocks.join('\n\n').trim();
+    if(!resp.ok) throw new Error(data.error || ('HTTP '+resp.status));
     out.className = 'output';
-    out.textContent = text || 'No text returned — raw response: ' + JSON.stringify(data).slice(0,500);
+    out.textContent = data.text || 'No text returned.';
   } catch(err){
-    // A file opened locally (file:// or outside claude.ai) has no credentials and no CORS path to
-    // api.anthropic.com — that call can only succeed when this page runs inside a Claude.ai chat/artifact.
-    // Fall back to something actually useful: a ready-to-paste prompt.
-    const combined = 'SYSTEM INSTRUCTIONS:\n' + fw.system + '\n\nREQUEST:\n' + userMsg;
     out.className = 'output';
-    out.innerHTML = '';
-    const note = document.createElement('div');
-    note.style.marginBottom = '12px';
-    note.style.color = 'var(--dim)';
-    note.style.fontFamily = 'var(--mono)';
-    note.style.fontSize = '11.5px';
-    note.style.lineHeight = '1.6';
-    note.textContent = "This page can't call Claude directly when opened as a local file or outside claude.ai — browsers block that request (no credentials, no CORS). Copy the prompt below and paste it into a Claude chat to get the full analysis with live web search:";
-    const ta = document.createElement('textarea');
-    ta.value = combined;
-    ta.style.width = '100%';
-    ta.style.height = '160px';
-    ta.style.fontFamily = 'var(--mono)';
-    ta.style.fontSize = '11.5px';
-    ta.readOnly = true;
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = 'Copy prompt';
-    copyBtn.className = 'primary';
-    copyBtn.style.marginTop = '10px';
-    copyBtn.onclick = () => { ta.select(); document.execCommand('copy'); copyBtn.textContent = 'Copied ✓'; setTimeout(()=>copyBtn.textContent='Copy prompt', 1500); };
-    out.appendChild(note); out.appendChild(ta); out.appendChild(copyBtn);
+    out.textContent = "Couldn't reach the analysis backend: " + err.message + "\n\nCheck that api/analyze.js is deployed at the /api path and that NVIDIA_API_KEY is set correctly in your hosting provider's environment variables.";
   } finally {
     btn.disabled = false;
   }
