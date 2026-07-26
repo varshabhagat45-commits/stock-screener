@@ -3,8 +3,7 @@
 // Requires env var NVIDIA_API_KEY set in your hosting provider (never exposed to the browser).
 // Uses NVIDIA's hosted DeepSeek model via their OpenAI-compatible endpoint (build.nvidia.com).
 
-const NVIDIA_MODEL = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-r1';
-
+const NVIDIA_MODEL = process.env.NVIDIA_MODEL || 'deepseek-ai/deepseek-v3.1';
 const FRAMEWORKS = {
   quick: {
     maxTokens: 1200,
