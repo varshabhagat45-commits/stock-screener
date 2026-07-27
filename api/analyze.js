@@ -38,32 +38,64 @@ Tag claims (Evidence) or (Inference). No buy/sell/hold call, no price target. En
   }
 };
 
+function send(res, status, obj) {
+  res.statusCode = status;
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify(obj));
+}
+
+async function readBody(req) {
+  if (req.body && typeof req.body === 'object') return req.body;
+  if (typeof req.body === 'string' && req.body.length) {
+    try { return JSON.parse(req.body); } catch { /* fall through */ }
+  }
+  // Fallback: read the raw stream ourselves (covers cases where the platform didn't pre-parse it).
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  const raw = Buffer.concat(chunks).toString('utf8');
+  if (!raw) return {};
+  return JSON.parse(raw);
+}
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
-  }
-
-  const apiKey = process.env.NVIDIA_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: 'Server is missing NVIDIA_API_KEY. Set it in your hosting provider\'s environment variables (see README).' });
-    return;
-  }
-
-  const { company, peer, framework } = req.body || {};
-  if (!company || typeof company !== 'string') {
-    res.status(400).json({ error: 'company is required' });
-    return;
-  }
-  const fw = FRAMEWORKS[framework];
-  if (!fw) {
-    res.status(400).json({ error: 'Unknown framework: ' + framework });
-    return;
-  }
-
-  const userMsg = `Analyze ${company}${peer ? ' (contrast/peer: ' + peer + ')' : ''} using the framework in your instructions.`;
-
   try {
+    console.log('analyze.js invoked, method =', req.method);
+
+    if (req.method !== 'POST') {
+      send(res, 405, { error: 'Method not allowed' });
+      return;
+    }
+
+    const apiKey = process.env.NVIDIA_API_KEY;
+    if (!apiKey) {
+      send(res, 500, { error: "Server is missing NVIDIA_API_KEY. Set it in your hosting provider's environment variables (see README)." });
+      return;
+    }
+
+    let body;
+    try {
+      body = await readBody(req);
+    } catch (parseErr) {
+      console.log('Body parse failed:', parseErr.message);
+      send(res, 400, { error: 'Could not parse request body: ' + parseErr.message });
+      return;
+    }
+    console.log('Parsed body:', JSON.stringify(body));
+
+    const { company, peer, framework } = body || {};
+    if (!company || typeof company !== 'string') {
+      send(res, 400, { error: 'company is required' });
+      return;
+    }
+    const fw = FRAMEWORKS[framework];
+    if (!fw) {
+      send(res, 400, { error: 'Unknown framework: ' + framework });
+      return;
+    }
+
+    const userMsg = `Analyze ${company}${peer ? ' (contrast/peer: ' + peer + ')' : ''} using the framework in your instructions.`;
+
+    console.log('Calling NVIDIA API, model =', NVIDIA_MODEL);
     const upstream = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -82,9 +114,19 @@ export default async function handler(req, res) {
       })
     });
 
-    const data = await upstream.json();
+    const rawUpstreamText = await upstream.text();
+    console.log('NVIDIA status:', upstream.status, '| body (first 500 chars):', rawUpstreamText.slice(0, 500));
+
+    let data;
+    try {
+      data = JSON.parse(rawUpstreamText);
+    } catch {
+      send(res, 502, { error: 'NVIDIA returned a non-JSON response (status ' + upstream.status + '): ' + rawUpstreamText.slice(0, 300) });
+      return;
+    }
+
     if (!upstream.ok) {
-      res.status(upstream.status).json({ error: data.error?.message || JSON.stringify(data) });
+      send(res, upstream.status, { error: data.error?.message || JSON.stringify(data) });
       return;
     }
 
@@ -92,8 +134,15 @@ export default async function handler(req, res) {
     // DeepSeek-R1 sometimes emits a <think>...</think> reasoning block before the real answer — strip it.
     text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
-    res.status(200).json({ text: text || 'No text returned by the model.' });
+    send(res, 200, { text: text || 'No text returned by the model.' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.log('Unhandled error in analyze.js:', err.stack || err.message);
+    try {
+      send(res, 500, { error: err.message || 'Unknown server error' });
+    } catch {
+      // last resort, in case send() itself fails
+      res.statusCode = 500;
+      res.end('{"error":"Fatal error, see function logs"}');
+    }
   }
 }
