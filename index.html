@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Long-Term Stock Screener</title>
+<style>
+  :root{
+    --bg:#faf9f6; --panel:#ffffff; --panel-2:#f2f1ec; --line:#e3e0d6;
+    --text:#20241f; --dim:#767a6e; --amber:#b8791a; --green:#1f8a4c;
+    --red:#c23b2c; --gray:#a7a99c; --accent:#2f5d4f;
+    --mono: "IBM Plex Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --sans: "IBM Plex Sans", "Inter", -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); padding:28px 20px 60px; }
+  h1{ font-family:var(--mono); font-size:20px; letter-spacing:.5px; margin:0 0 2px 0; font-weight:700; }
+  .sub{ color:var(--dim); font-size:13px; margin-bottom:18px; font-family:var(--mono); max-width:920px; line-height:1.6; }
+  .sub b{ color:var(--accent); font-weight:700; }
+  .source-note{ background:#eef4ee; border:1px solid #cfe0cf; color:#2f5d4f; font-family:var(--mono); font-size:11.5px; padding:10px 14px; margin-bottom:20px; line-height:1.7; }
+
+  .maintabs{ display:flex; gap:2px; margin-bottom:2px; }
+  .maintab{ font-family:var(--mono); font-size:13px; padding:10px 20px; cursor:pointer; background:var(--panel-2); color:var(--dim); border:1px solid var(--line); border-bottom:none; letter-spacing:.5px; font-weight:700; }
+  .maintab.active{ background:#fff; color:var(--accent); }
+  .mainpanel{ border:1px solid var(--line); background:#fff; padding:22px; margin-bottom:20px; }
+
+  .tabs{ display:flex; gap:2px; margin-bottom:16px; }
+  .tab{ font-family:var(--mono); font-size:12px; padding:8px 16px; cursor:pointer; background:var(--panel); color:var(--dim); border:1px solid var(--line); letter-spacing:.5px; }
+  .tab.active{ background:#fff; color:var(--accent); border-color:var(--accent); font-weight:700; }
+
+  .card{ background:var(--panel); border:1px solid var(--line); padding:18px; margin-bottom:18px; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+  .card h2{ font-family:var(--mono); font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin:0 0 4px 0; font-weight:700; }
+  .card .h2-sub{ font-size:11px; color:var(--dim); margin-bottom:14px; font-family:var(--mono); }
+
+  details.manual{ margin-top:4px; }
+  details.manual summary{ cursor:pointer; font-family:var(--mono); font-size:12px; color:var(--accent); padding:8px 0; font-weight:700; letter-spacing:.3px; list-style:none; }
+  details.manual summary::-webkit-details-marker{ display:none; }
+  details.manual summary:before{ content:"+ "; }
+  details.manual[open] summary:before{ content:"− "; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px 14px; margin-top:10px; }
+  label{ font-size:11px; color:var(--dim); display:block; margin-bottom:4px; font-family:var(--mono); }
+  input, select, textarea{ width:100%; background:#fff; border:1px solid var(--line); color:var(--text); padding:8px 9px; font-family:var(--mono); font-size:13px; }
+  input:focus, select:focus, textarea:focus{ outline:none; border-color:var(--accent); }
+  .name-field{ grid-column:span 2; }
+  @media (max-width:520px){ .name-field{ grid-column:span 1; } }
+
+  .row-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:14px; flex-wrap:wrap; gap:10px; }
+  button{ font-family:var(--mono); font-size:12px; letter-spacing:.5px; cursor:pointer; background:var(--panel-2); border:1px solid var(--line); color:var(--text); padding:9px 16px; }
+  button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); font-weight:700; }
+  button.primary:disabled{ opacity:.55; cursor:default; }
+  button:hover:not(:disabled){ filter:brightness(0.96); }
+
+  table{ width:100%; border-collapse:collapse; margin-top:6px; }
+  th{ text-align:left; font-family:var(--mono); font-size:10px; text-transform:uppercase; color:var(--dim); letter-spacing:.6px; padding:8px 10px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td{ padding:10px; border-bottom:1px solid var(--line); font-size:13px; vertical-align:top; }
+  tr:hover td{ background:var(--panel-2); }
+  .stock-name{ font-weight:700; cursor:pointer; }
+  .stock-name:hover{ text-decoration:underline; color:var(--accent); }
+  .ticker{ color:var(--dim); font-family:var(--mono); font-size:11px; }
+
+  .gate-row{ display:flex; gap:5px; }
+  .dot{ width:9px; height:9px; border-radius:50%; display:inline-block; border:1px solid var(--line); }
+  .dot.pass{ background:var(--green); border-color:var(--green); }
+  .dot.fail{ background:var(--red); border-color:var(--red); }
+  .dot.warn{ background:var(--amber); border-color:var(--amber); }
+  .dot.na{ background:#fff; border-color:var(--gray); }
+
+  .score{ font-family:var(--mono); font-size:18px; font-weight:700; }
+  .verdict{ font-family:var(--mono); font-size:11px; padding:3px 8px; letter-spacing:.4px; display:inline-block; border:1px solid; font-weight:700; }
+  .verdict.strong{ color:var(--green); border-color:var(--green); background:#eaf7ee; }
+  .verdict.watch{ color:var(--amber); border-color:var(--amber); background:#fbf3e4; }
+  .verdict.avoid{ color:var(--red); border-color:var(--red); background:#fbeceb; }
+
+  .reasons{ font-size:11px; color:var(--dim); margin-top:4px; line-height:1.5; }
+  .empty{ color:var(--dim); font-size:13px; padding:24px; text-align:center; font-family:var(--mono); }
+  .remove{ color:var(--dim); cursor:pointer; font-size:16px; line-height:1; padding:2px 6px; }
+  .remove:hover{ color:var(--red); }
+  .legend{ font-size:11px; color:var(--dim); margin-top:14px; font-family:var(--mono); line-height:1.9; }
+  .legend .dot{ margin-right:5px; vertical-align:middle; }
+  .disclaimer{ color:var(--dim); font-size:11px; margin-top:26px; font-family:var(--mono); line-height:1.6; border-top:1px solid var(--line); padding-top:14px; }
+  .badge{ font-family:var(--mono); font-size:10px; color:#fff; background:var(--accent); padding:2px 6px; margin-left:8px; }
+
+  .framework-desc{ font-size:12px; color:var(--dim); line-height:1.6; margin:8px 0 16px; padding:10px 12px; background:var(--panel-2); border:1px solid var(--line); }
+  .output{ white-space:pre-wrap; font-family:var(--sans); font-size:13.5px; line-height:1.7; border:1px solid var(--line); background:var(--panel-2); padding:18px; margin-top:16px; min-height:80px; }
+  .output.loading{ color:var(--dim); font-family:var(--mono); font-size:12px; }
+  .spin{ display:inline-block; width:9px; height:9px; border-radius:50%; background:var(--amber); margin-right:6px; animation:pulse 1s infinite; }
+  @keyframes pulse{ 0%,100%{opacity:.3;} 50%{opacity:1;} }
+</style>
+</head>
+<body>
+
+<h1>LONG-TERM STOCK SCREENER</h1>
+<div class="sub">Built on the <b>Operating Business &amp; Financial Quality Framework</b>, plus the Quick Take, Value/Technical-Timing, and Long-Term Thesis frameworks — merged into one interface. Screen mechanically, then run the full skill on any name straight from this page.</div>
+
+<div class="maintabs">
+  <div class="maintab active" data-main="screener" onclick="setMain('screener')">SCREENER</div>
+  <div class="maintab" data-main="analyze" onclick="setMain('analyze')">ANALYZE A STOCK</div>
+</div>
+
+<div class="mainpanel" id="panel-screener">
+
+<div class="source-note">
+AUTO-SCREENED per your latest filter (all AND): Market Cap &gt; ₹500 Cr, Sales/Profit 5yr growth &gt; 10%/12%, positive YoY quarterly sales &amp; profit growth, ROCE &gt; 18%, ROE &gt; 15%, D/E &lt; 0.5, P/E &lt; 25. 11 names cleared it, from the top page of a 58-name match (Screener.in blocked deeper pages this run — re-run for the rest). <b>EBITDA margin, interest coverage, promoter holding %, pledge %, and CFO/PAT aren't in this data pull</b> — those show ⚪ N/A and need an individual check before trusting a STRONG verdict. Worth noticing yourself: this list is heavily solar/renewables-concentrated, which is a sector-crowding signal worth interrogating, not just accepting. Click a name to run the full deep-dive on it in the Analyze tab.
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-mode="operating" onclick="setMode('operating')">OPERATING COMPANY</div>
+  <div class="tab" data-mode="nbfc" onclick="setMode('nbfc')">NBFC / LENDER</div>
+</div>
+
+<div class="card">
+  <h2>Screened list <span id="countLabel" style="color:var(--dim); font-weight:400;"></span></h2>
+  <div class="h2-sub" id="listSub"></div>
+  <div id="tableWrap"><div class="empty">No stocks screened yet.</div></div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<div class="card">
+  <details class="manual">
+    <summary>Add a candidate manually (for a stock outside this run, or to fill in the N/A metrics above)</summary>
+    <div id="formGrid" class="grid"></div>
+    <div class="row-actions">
+      <span style="color:var(--dim); font-size:11px; font-family:var(--mono);">Leave a field blank if unknown — it will show as N/A, not a guess or a fail.</span>
+      <button class="primary" onclick="addStock()">+ Add to screen</button>
+    </div>
+  </details>
+</div>
+
+</div>
+
+<div class="mainpanel" id="panel-analyze" style="display:none;">
+
+  <div class="card">
+    <h2>Run the full skill on a stock</h2>
+    <div class="h2-sub">This calls Claude directly from the page — research and the full write-up happen live, right here.</div>
+
+    <div class="grid" style="grid-template-columns: 2fr 2fr 3fr;">
+      <div>
+        <label>Company / Ticker</label>
+        <input id="an_company" type="text" placeholder="e.g. Kaveri Seed Co.">
+      </div>
+      <div>
+        <label>Peer / contrast company (optional)</label>
+        <input id="an_peer" type="text" placeholder="e.g. a close competitor">
+      </div>
+      <div>
+        <label>Framework</label>
+        <select id="an_framework" onchange="updateFrameworkDesc()"></select>
+      </div>
+    </div>
+
+    <div class="framework-desc" id="frameworkDesc"></div>
+
+    <div class="row-actions">
+      <span style="color:var(--dim); font-size:11px; font-family:var(--mono);">Runs on DeepSeek via NVIDIA — no live web search on this backend, so figures may be outdated. The model is instructed to flag anything that needs verification rather than guess.</span>
+      <button class="primary" id="runBtn" onclick="runAnalysis()">Run analysis →</button>
+    </div>
+
+    <div class="output" id="an_output" style="display:none;"></div>
+  </div>
+
+</div>
+
+<div class="disclaimer">
+This is educational analysis, not investment advice — no buy/sell/hold call, no price target, anywhere in this tool. The screener is a mechanical pre-filter; a stock clearing every gate still needs the qualitative judgment in the Analyze tab (moat durability, management incentives, disconfirming evidence) before any decision. Figures are pulled live where noted; verify independently.
+</div>
+
+<script>
+/* ---------- Framework definitions (merged from all four skills) ---------- */
+const FRAMEWORKS = {
+  quick: {
+    label: 'Quick Take — fast plain-English read',
+    desc: 'A tight ~150-220 word read: what the company does, valuation vs sector/history, health, growth, 3 strengths, 2 watch-points, overall quality call. No buy/sell/hold.',
+    system: `You are a fundamentals-only equity analyst for Indian (NSE/BSE) stocks. Search the web for current data before writing (CMP, P/E, D/E, ROE/ROCE, growth, promoter holding/pledging). Never fabricate a number — if something can't be found, say so.
+Write a Quick Take (~150-220 words): one line on what the company does and its sector; snapshot (CMP, market cap, P/E with a Cheap/Fair/Expensive verdict vs sector & own history); D/E and ROE/ROCE in plain terms; growth trend (accelerating/steady/slowing/declining) in one line; 3 strengths and 2 watch-points (one line each); an overall fundamental quality call (Strong/Moderate/Weak) with one sentence why.
+No buy/sell/hold call, no price target, no predictions. End with: "This is a view of the fundamentals for educational purposes — not investment advice. Verify figures independently. The decision is yours."`
+  },
+  operating: {
+    label: 'Deep Dive — Operating Company',
+    desc: 'Full 7-step operating-business analysis: business model & moat, unit economics, growth runway & execution risk, 5yr financial quality, management & capital allocation, multi-method valuation (bull/base/bear), thesis with falsifiers and a quarterly KPI dashboard.',
+    system: `You are a long-term equity analyst using the Operating Business & Financial Quality Framework for an Indian operating company (manufacturer, industrial, consumer, EPC, etc.). Treat the company as an operating system, not just a revenue-and-margin story. Search the web for current filings, earnings materials, and market data before writing — never fabricate a number, say explicitly what couldn't be found.
+Structure the analysis exactly as: 1) Business model & industry position (source of advantage, durability, customer concentration) 2) Operating engine & unit economics (volume, realisation, EBITDA/unit, utilisation, working capital) 3) Growth runway & execution (existing business, expansion, capital, returns vs cost of capital, risks) 4) Financial quality & balance-sheet risk (5yr revenue/EBITDA/PAT/FCF/ROCE/ROIC, CFO/PAT conversion, working-capital days, debt, red flags) 5) Management, governance & capital allocation 6) Valuation (normalised P/E or EV/EBITDA across a cycle, DCF/reverse-DCF assumptions, peer comp, bull/base/bear) 7) Thesis, disconfirming evidence & a quarterly KPI dashboard (3-5 reasons the thesis could fail, what must happen in 4-8 quarters).
+No buy/sell/hold call, no price target. Tag material claims (Evidence) or (Inference) where useful. End with: "This is educational analysis, not investment advice. Verify figures independently — the decision is yours."`
+  },
+  nbfc: {
+    label: 'Deep Dive — NBFC / Lender',
+    desc: 'Growth-quality, RoA/RoE/NIM bridge, asset-quality stress test, capital & funding with a no-equity-raise test, concentration & governance, P/B-vs-sustainable-RoE valuation.',
+    system: `You are a long-term equity analyst using the NBFC/Lender variant of the Operating Business & Financial Quality Framework. Analyze the company as a potential long-term compounder, not merely a fast-growing lender. Search the web for current filings, investor presentations, and credit-rating rationale before writing — never fabricate a number.
+Cover: 1) Frame the investment question (growth vs. growth-that-scales-safely) 2) Business model & moat (underwriting, collateral, funding, data/anchor advantages) 3) Growth quality (AUM/loan-book CAGR by segment, organic vs. co-lending/securitisation) 4) Unit economics & returns (RoA, RoE, NIM, cost-to-income, DuPont bridge, sustainability) 5) Asset-quality stress test (GNPA, NNPA, provisioning, credit-cost normalization) 6) New growth engines (market size, funding needs, dilution risk to the moat) 7) Capital, funding & liquidity — explicitly test any no-equity-raise claim against leverage, AUM growth and downside credit costs 8) Concentration & governance (anchor/promoter/sector exposure, pledging) 9) Valuation (P/B vs. sustainable RoE, bull/base/bear) 10) Peer comparison 11) Thesis scorecard with 6-10 quarterly checkpoints.
+No buy/sell/hold call, no price target. Verdict line: compounder candidate / promising but early / fairly valued / avoid — framed as a business read, not advice. End with: "This is educational analysis, not investment advice. Verify figures independently — the decision is yours."`
+  },
+  value: {
+    label: 'Value & Technical Timing (Moat + Chart)',
+    desc: 'Two-part read: Part A investigates business quality and moat (Phase-0 gate, falsifiers); Part B checks whether the chart currently agrees and where a reasonable entry might be. Never a price target.',
+    system: `You are a long-term, business-focused equity analyst combining quality investing with a technical confirmation layer, for an Indian stock. State once at the top: "This is an educational analysis, not investment advice." If no peer is given, pick the most obvious contrast company yourself and say why.
+Search the web for current filings, valuation, shareholding, and weekly/monthly price-volume history before writing — never fabricate a number.
+Structure: Opening Snapshot (facts only). Phase 0 — The Three-Question Gate (why customers choose this business; why competitors can't replicate it; who would miss it if it vanished — grade strong/weak; if all three are weak, say so and reframe the rest as speculation-grading). Part A — Fundamentals: 1) the core question & two-sided answer with a Falsifier 2) honest attribution of past performance (market/tailwind/shortage/acquisition/moat) with a pricing-power natural-experiment test 3) moat classification & returns on capital 4) industry structure & power balance 5) customer behavior & demand durability 6) management, incentives & capital allocation 7) external forces over a decade. Part B — Technicals: 8) primary trend & structure (weekly/monthly, 50w/200w MAs) 9) relative strength vs. Nifty/Sensex & sector 10) volume & participation 11) valuation zones on the chart 12) entry approach (lump-sum vs. staggered vs. wait — never a target price or "will rise" call). 13) Kill the thesis — 3 strongest contradicting facts, 3+ falsification criteria with numbers/dates, leading indicators, what the price implies, bull/base/bear verdict with probabilities.
+Tag claims (Evidence) or (Inference). No buy/sell/hold call, no price target, no "will rise/fall" language anywhere. End with: "This is educational analysis, not investment advice. Verify figures independently — the decision is yours."`
+  },
+  thesis: {
+    label: 'Long-Term Thesis (Myths Framework)',
+    desc: 'Evidence-vs-inference deep thesis: why the numbers exist, cycle vs. structural quality, price vs. embedded expectations, growth attribution, management incentives, falsifiers, bull/base/bear.',
+    system: `You are a long-term equity analyst producing a rigorous investment thesis for an Indian stock, built on "financial statements are evidence, not the verdict." If no peer is given, pick the most obvious one yourself and say why. Search the web for current data before writing — never fabricate a number.
+Structure exactly: 0) Snapshot (facts only, no judgment) 1) The Three Questions (why customers choose this business; why competitors can't replicate it; would anyone miss it — gate rule: if all weak, treat the rest as speculation-grading) 2) What's really behind the numbers (the operational choice under each headline metric) 3) Cycle vs. structure (did the business change or the environment? pricing-power arithmetic check) 4) Price vs. expectations (valuation vs. own history & peers, what the market is pricing this as) 5) Where the growth came from, and whether it continues 6) Contradictions to chase, not confirmations to collect 7) Management & capital allocation (guidance vs. delivery, incremental ROIC, FCF after capex) 8) Kill the thesis (3 strongest contradicting facts, 3+ falsification criteria with numbers/dates, leading indicators) 9) Verdict — bull/base/bear over 5-10 years with probabilities and approximate stock outcomes, closing with one sentence "in the voice of the business."
+Tag claims (Evidence) or (Inference). No buy/sell/hold call, no price target. End with: "This is educational analysis, not investment advice. Verify figures independently — the decision is yours."`
+  }
+};
+
+function populateFrameworkSelect(){
+  const sel = document.getElementById('an_framework');
+  sel.innerHTML = Object.entries(FRAMEWORKS).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('');
+  updateFrameworkDesc();
+}
+function updateFrameworkDesc(){
+  const k = document.getElementById('an_framework').value;
+  document.getElementById('frameworkDesc').textContent = FRAMEWORKS[k].desc;
+}
+
+function setMain(m){
+  document.querySelectorAll('.maintab').forEach(t=>t.classList.toggle('active', t.dataset.main===m));
+  document.getElementById('panel-screener').style.display = m==='screener' ? '' : 'none';
+  document.getElementById('panel-analyze').style.display = m==='analyze' ? '' : 'none';
+}
+
+function analyzeFromScreener(name){
+  document.getElementById('an_company').value = name;
+  setMain('analyze');
+  document.getElementById('an_company').focus();
+}
+
+async function runAnalysis(){
+  const company = document.getElementById('an_company').value.trim();
+  const peer = document.getElementById('an_peer').value.trim();
+  const fwKey = document.getElementById('an_framework').value;
+  if(!company){ alert('Enter a company or ticker first.'); return; }
+  const btn = document.getElementById('runBtn');
+  const out = document.getElementById('an_output');
+  btn.disabled = true;
+  out.style.display = 'block';
+  out.className = 'output loading';
+  out.innerHTML = '<span class="spin"></span>Researching ' + company + ' and writing the analysis — this can take a little while for the deeper frameworks...';
+
+  try{
+    const resp = await fetch('/api/analyze', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ company, peer, framework: fwKey })
+    });
+    const data = await resp.json();
+    if(!resp.ok) throw new Error(data.error || ('HTTP '+resp.status));
+    out.className = 'output';
+    out.textContent = data.text || 'No text returned.';
+  } catch(err){
+    out.className = 'output';
+    out.textContent = "Couldn't reach the analysis backend: " + err.message + "\n\nCheck that api/analyze.js is deployed at the /api path and that NVIDIA_API_KEY is set correctly in your hosting provider's environment variables.";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+/* ---------- Screener (unchanged logic from prior version) ---------- */
+let mode = 'operating';
+
+let stocks = [
+  {mode:'operating', name:'Waaree Renewable Tech.', roce:83.61, roceTrend:null, revCagr:131.31, profitCagr:60.69, marginTrend:null, de:0.16, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:10731, auto:true},
+  {mode:'operating', name:'Emmvee Photovoltaic', roce:44.83, roceTrend:null, revCagr:62.25, profitCagr:89.43, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:18538, auto:true},
+  {mode:'operating', name:'Websol Energy', roce:63.18, roceTrend:null, revCagr:132.07, profitCagr:152.31, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:4992, auto:true},
+  {mode:'operating', name:'Alpex Solar', roce:50.48, roceTrend:null, revCagr:245.40, profitCagr:135.04, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:2693, auto:true},
+  {mode:'operating', name:'Sathlokhar Systems', roce:53.42, roceTrend:null, revCagr:402.87, profitCagr:340.18, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:1037, auto:true},
+  {mode:'operating', name:'Waaree Energies', roce:38.78, roceTrend:null, revCagr:111.80, profitCagr:70.64, marginTrend:null, de:0.22, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:92913, auto:true},
+  {mode:'operating', name:'Danish Power', roce:40.21, roceTrend:null, revCagr:29.18, profitCagr:41.39, marginTrend:null, de:0.20, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:1651, auto:true},
+  {mode:'operating', name:'Bondada Engineering', roce:38.66, roceTrend:null, revCagr:27.93, profitCagr:11.39, marginTrend:null, de:0.20, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:3968, auto:true},
+  {mode:'operating', name:'Australian Premium Solar', roce:70.83, roceTrend:null, revCagr:83.88, profitCagr:114.41, marginTrend:null, de:0.05, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:738, auto:true},
+  {mode:'operating', name:'Arrow Greentech', roce:53.25, roceTrend:null, revCagr:1.72, profitCagr:3.50, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:876, auto:true},
+  {mode:'operating', name:'R M Drip & Sprinklers', roce:44.66, roceTrend:null, revCagr:55.60, profitCagr:37.30, marginTrend:null, de:0.10, intCov:null, fcfConv:null, promoter:null, promoterTrend:null, pledge:null, peVsAvg:null, mcap:833, auto:true},
+];
+
+const FIELDS = {
+  operating: [
+    {k:'name', label:'Company / Ticker', type:'text', name:true},
+    {k:'roce', label:'ROCE 5yr avg (%)', type:'number'},
+    {k:'roceTrend', label:'ROCE trend', type:'select', options:['Rising','Stable','Falling']},
+    {k:'revCagr', label:'Revenue 5yr CAGR (%)', type:'number'},
+    {k:'profitCagr', label:'Profit 5yr CAGR (%)', type:'number'},
+    {k:'marginTrend', label:'EBITDA margin trend', type:'select', options:['Rising','Stable','Falling']},
+    {k:'de', label:'Debt / Equity', type:'number'},
+    {k:'intCov', label:'Interest coverage (x)', type:'number'},
+    {k:'fcfConv', label:'CFO / PAT (%)', type:'number'},
+    {k:'promoter', label:'Promoter holding (%)', type:'number'},
+    {k:'promoterTrend', label:'Promoter holding trend', type:'select', options:['Rising','Stable','Falling']},
+    {k:'pledge', label:'Pledging (%)', type:'number'},
+    {k:'peVsAvg', label:'Current P/E ÷ 5yr avg P/E', type:'number'},
+  ],
+  nbfc: [
+    {k:'name', label:'Company / Ticker', type:'text', name:true},
+    {k:'roa', label:'RoA (%)', type:'number'},
+    {k:'roe', label:'RoE (%)', type:'number'},
+    {k:'aumCagr', label:'AUM 3yr CAGR (%)', type:'number'},
+    {k:'nim', label:'NIM / spread (%)', type:'number'},
+    {k:'gnpa', label:'GNPA (%)', type:'number'},
+    {k:'nnpa', label:'NNPA (%)', type:'number'},
+    {k:'pcr', label:'Provision coverage (%)', type:'number'},
+    {k:'creditCostTrend', label:'Credit cost trend', type:'select', options:['Improving','Stable','Worsening']},
+    {k:'car', label:'Capital adequacy / CAR (%)', type:'number'},
+    {k:'leverage', label:'Debt / Net worth (x)', type:'number'},
+    {k:'promoter', label:'Promoter holding (%)', type:'number'},
+    {k:'pledge', label:'Pledging (%)', type:'number'},
+    {k:'pbVsRoe', label:'Current P/B ÷ sustainable-RoE-implied P/B', type:'number'},
+  ]
+};
+
+function setMode(m){
+  mode = m;
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.mode===m));
+  renderForm();
+  render();
+}
+
+function renderForm(){
+  const wrap = document.getElementById('formGrid');
+  wrap.innerHTML = '';
+  FIELDS[mode].forEach(f=>{
+    const div = document.createElement('div');
+    if(f.name) div.className = 'name-field';
+    let inner = `<label>${f.label}</label>`;
+    if(f.type==='select'){
+      inner += `<select id="f_${f.k}"><option value="">—</option>${f.options.map(o=>`<option>${o}</option>`).join('')}</select>`;
+    } else {
+      inner += `<input id="f_${f.k}" type="${f.type}" placeholder="${f.type==='number'?'0':''}">`;
+    }
+    div.innerHTML = inner;
+    wrap.appendChild(div);
+  });
+}
+
+function num(v){ return v===''||v===undefined||v===null ? null : parseFloat(v); }
+
+function addStock(){
+  const entry = {mode};
+  let hasName = false;
+  FIELDS[mode].forEach(f=>{
+    const el = document.getElementById('f_'+f.k);
+    const v = el.value;
+    if(f.k==='name' && v.trim()!==''){ hasName = true; }
+    entry[f.k] = f.type==='number' ? num(v) : (v===''?null:v);
+  });
+  if(!hasName){ alert('Enter a company name or ticker first.'); return; }
+  stocks.push(entry);
+  FIELDS[mode].forEach(f=>{ const el = document.getElementById('f_'+f.k); if(f.type!=='select') el.value=''; else el.selectedIndex=0; });
+  render();
+}
+
+function removeStock(entry){ stocks = stocks.filter(s=>s!==entry); render(); }
+
+function evalOperating(s){
+  const gates = [];
+  let g1='na';
+  if(s.roce!==null){
+    if(s.roce>=15 && s.roceTrend!=='Falling') g1='pass';
+    else if(s.roce>=10) g1='warn';
+    else g1='fail';
+  }
+  gates.push({label:'Quality (ROCE)', status:g1});
+
+  let g2='na';
+  if(s.revCagr!==null && s.profitCagr!==null){
+    const growing = s.revCagr>=12 && s.profitCagr>=12;
+    const pricingPower = s.marginTrend!=='Falling';
+    if(growing && pricingPower) g2='pass';
+    else if(growing || (s.revCagr>=8 && pricingPower)) g2='warn';
+    else g2='fail';
+  }
+  gates.push({label:'Growth quality', status:g2});
+
+  let g3='na';
+  if(s.de!==null || s.intCov!==null || s.fcfConv!==null){
+    const parts = [];
+    if(s.de!==null) parts.push(s.de<1?2:(s.de<2?1:0));
+    if(s.intCov!==null) parts.push(s.intCov>3?2:(s.intCov>1.5?1:0));
+    if(s.fcfConv!==null) parts.push(s.fcfConv>=80?2:(s.fcfConv>=50?1:0));
+    const avg = parts.reduce((a,b)=>a+b,0)/parts.length;
+    g3 = avg>=1.75 ? 'pass' : (avg>=0.9 ? 'warn' : 'fail');
+  }
+  gates.push({label:'Balance sheet health', status:g3});
+
+  let g4='na';
+  if(s.pledge!==null){
+    if(s.pledge<10 && s.promoterTrend!=='Falling') g4='pass';
+    else if(s.pledge<25) g4='warn';
+    else g4='fail';
+  }
+  gates.push({label:'Ownership & governance', status:g4});
+
+  let g5='na';
+  if(s.peVsAvg!==null){
+    if(s.peVsAvg<=1.1) g5='pass';
+    else if(s.peVsAvg<=1.4) g5='warn';
+    else g5='fail';
+  }
+  gates.push({label:'Valuation zone', status:g5});
+
+  return finalize(gates, {hardGates:[0,1,2,3]});
+}
+
+function evalNbfc(s){
+  const gates = [];
+  let g1='na';
+  if(s.roa!==null && s.roe!==null){
+    if(s.roa>=1.8 && s.roe>=15) g1='pass';
+    else if(s.roa>=1.2 && s.roe>=12) g1='warn';
+    else g1='fail';
+  }
+  gates.push({label:'Returns (RoA/RoE)', status:g1});
+
+  let g2='na';
+  if(s.aumCagr!==null){
+    if(s.aumCagr>=15 && s.aumCagr<=40) g2='pass';
+    else if(s.aumCagr>=10) g2='warn';
+    else g2='fail';
+  }
+  gates.push({label:'AUM growth quality', status:g2});
+
+  let g3='na';
+  if(s.gnpa!==null && s.nnpa!==null){
+    if(s.gnpa<2 && s.nnpa<1 && s.creditCostTrend!=='Worsening') g3='pass';
+    else if(s.gnpa<4 && s.nnpa<2) g3='warn';
+    else g3='fail';
+  }
+  gates.push({label:'Asset quality', status:g3});
+
+  let g4='na';
+  if(s.car!==null && s.leverage!==null){
+    if(s.car>=18 && s.leverage<6) g4='pass';
+    else if(s.car>=15 && s.leverage<8) g4='warn';
+    else g4='fail';
+  }
+  gates.push({label:'Capital & funding', status:g4});
+
+  let g5='na';
+  if(s.pledge!==null){
+    if(s.pledge<10) g5='pass';
+    else if(s.pledge<25) g5='warn';
+    else g5='fail';
+  }
+  gates.push({label:'Ownership & governance', status:g5});
+
+  let g6='na';
+  if(s.pbVsRoe!==null){
+    if(s.pbVsRoe<=1.1) g6='pass';
+    else if(s.pbVsRoe<=1.4) g6='warn';
+    else g6='fail';
+  }
+  gates.push({label:'Valuation vs sustainable RoE', status:g6});
+
+  return finalize(gates, {hardGates:[0,1,2,3,4]});
+}
+
+function finalize(gates, cfg){
+  const pts = {pass:2, warn:1, fail:0};
+  const known = gates.filter(g=>g.status!=='na');
+  const score = known.length ? Math.round(known.reduce((a,g)=>a+pts[g.status],0)/(known.length*2)*100) : 0;
+  const hardKnownFails = cfg.hardGates.filter(i=>gates[i].status==='fail').length;
+  const naCount = gates.filter(g=>g.status==='na').length;
+  let verdict;
+  if(hardKnownFails===0 && score>=75 && naCount<=1){ verdict='strong'; }
+  else if(hardKnownFails<=1 && score>=45){ verdict='watch'; }
+  else { verdict='avoid'; }
+  let reasons=[];
+  gates.forEach(g=>{ if(g.status==='fail') reasons.push(g.label+' fails'); });
+  if(naCount>0) reasons.push(naCount+' gate(s) not yet verified (N/A)');
+  return {gates, score, verdict, reasons};
+}
+
+function render(){
+  const modeStocks = stocks.filter(s=>s.mode===mode);
+  document.getElementById('countLabel').textContent = modeStocks.length ? `(${modeStocks.length})` : '';
+  document.getElementById('listSub').textContent = mode==='operating'
+    ? 'Auto-screened from Screener.in (Market Cap > ₹8,000 Cr) + anything you add manually below. Click a name to analyze it.'
+    : 'No live NBFC pull yet — add lenders manually below; free-tier Screener.in doesn\'t expose asset-quality fields cleanly.';
+  const wrap = document.getElementById('tableWrap');
+  if(modeStocks.length===0){
+    wrap.innerHTML = '<div class="empty">No stocks screened yet.</div>';
+    document.getElementById('legend').innerHTML='';
+    return;
+  }
+  const results = modeStocks.map((s)=>({s, r: s.mode==='operating'?evalOperating(s):evalNbfc(s)}));
+  results.sort((a,b)=>b.r.score-a.r.score);
+
+  let html = '<table><thead><tr><th>Verdict</th><th>Score</th><th>Company</th><th>Gates</th><th>Flags</th><th></th></tr></thead><tbody>';
+  results.forEach(({s,r})=>{
+    html += `<tr>
+      <td><span class="verdict ${r.verdict}">${r.verdict.toUpperCase()}</span></td>
+      <td><span class="score">${r.score}</span></td>
+      <td><div class="stock-name" data-name="${s.name.replace(/"/g,'&quot;')}" onclick="analyzeFromScreener(this.dataset.name)" title="Run full analysis">${s.name}${s.auto?'<span class="badge">AUTO</span>':''}</div><div class="ticker">${s.mode==='operating'?(s.mcap?'Mkt Cap ₹'+s.mcap.toLocaleString('en-IN')+' Cr':'Operating co.'):'NBFC / Lender'}</div></td>
+      <td><div class="gate-row">${r.gates.map(g=>`<span class="dot ${g.status==='na'?'na':g.status}" title="${g.label}: ${g.status}"></span>`).join('')}</div></td>
+      <td><div class="reasons">${r.reasons.length? r.reasons.join('<br>') : 'No hard-gate failures'}</div></td>
+      <td><span class="remove" onclick="removeStock(stocks[${stocks.indexOf(s)}])">✕</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+
+  document.getElementById('legend').innerHTML =
+    `<span class="dot pass"></span>Pass &nbsp; <span class="dot warn"></span>Borderline &nbsp; <span class="dot fail"></span>Fail &nbsp; <span class="dot na"></span>N/A (not yet verified) &nbsp;&nbsp; STRONG = clears every checked gate, score ≥75, at most one N/A. WATCHLIST = at most one hard-gate miss, score ≥45. AVOID = multiple hard-gate failures.`;
+}
+
+renderForm();
+render();
+populateFrameworkSelect();
+</script>
+</body>
+</html>
